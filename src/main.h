@@ -1,0 +1,170 @@
+#ifndef __MAIN_H__
+#define __MAIN_H__
+
+#include "openglwindow.h"
+
+#include "common.h"
+#include "GPUProgram.h"
+#include "Mesh.h"
+
+
+#include <QTime>
+#include <QtGui/QGuiApplication>
+#include <QtGui/QScreen>
+#include <QtGui/QKeyEvent>
+
+
+
+
+struct LightProperties
+{
+    glm::vec3   m_vAmbiant;
+    glm::vec3   m_vDiffuse;
+    glm::vec3   m_vSpecular;
+
+    LightProperties()
+    :   m_vAmbiant  ( 0.1f )
+    ,   m_vDiffuse  ( 1.f, 1.f, 1.f )
+    ,   m_vSpecular ( 1.0f, 1.0f, 1.0f )
+    {}
+};
+
+struct MaterialProperties
+{
+    glm::vec3   m_vAmbiant;
+    glm::vec3   m_vDiffuse;
+    glm::vec3   m_vSpecular;
+    float       m_fSpecularPower;
+
+    MaterialProperties()
+    :   m_vAmbiant      ( 0.1f, 0.4f, 0.4f )
+    ,   m_vDiffuse      ( 0.3f, 0.4f, 1.0f )
+    ,   m_vSpecular     ( 0.7f, 0.7f, 0.7f )
+    ,   m_fSpecularPower( 100.f )
+    {}
+};
+
+//------------------------------------------------------------------------------------
+
+
+class TPGLWindow : public OpenGLWindow
+{
+public:
+    TPGLWindow();
+    virtual ~TPGLWindow();
+
+    void initialize();
+
+    void render();
+
+    void update();
+
+private:
+
+    /// Handles key press event, and move the 3D object
+    void keyPressEvent(QKeyEvent *);
+
+    /// Handles resize event
+    void resizeEvent(QResizeEvent*);
+
+    //------------------------------------------------------------------------------------
+    /// Get the GLSL uniform locations
+    void getUniformLocations();
+
+    /// Send the uniform vars from the CPU to the GPU
+    void sendUniformsToGPU();
+
+     //------------------------------------------------------------------------------------
+    /// Creates the VertexBufferObject that contains the geometry position
+    void createMesh();
+
+    /// Destroys the VertexArrayObject created earlier
+    void destroyMesh();
+
+    //------------------------------------------------------------------------------------
+    /// Update the CameraProjection, CameraView, ObjectWorld matrices
+    void updateMatrices();
+
+    //------------------------------------------------------------------------------------
+    /// Creates the Texture object from a texture file
+    void createTextures();
+
+    /// Destroys all Texture objects
+    void destroyTextures();
+
+    /// Bind the textures to their texture unit
+    void setupTexturesInUnit();
+
+    //------------------------------------------------------------------------------------
+    /// Creates the RenderTarget - FBO, TextureObject for color buffer, RenderBuffer for Z buffer
+    void createRenderTarget();
+
+    /// Destroys all RenderTarget related data
+    void destroyRenderTarget();
+
+    /// Bind the FBO RenderTarget so that we can draw into it
+    void bindRenderTarget();
+
+    /// Unbind the FBO RenderTarget so that we can draw in the default Frame Buffer again
+    void unbindRenderTarget();
+
+    /// Writes the FBO color attachment to the disk
+    void writeFBOToFile( const std::string& _rstrFilePath );
+
+
+    GPUProgram              m_GPUProgramPhongTextured;
+    GPUProgram              m_GPUProgramPostProcess;
+
+    Mesh                    m_MeshSphere;
+    Mesh                    m_MeshScreen;
+    Mesh                    m_MeshCharacter;
+
+    //------------------------------------------------------------------------------------
+    glm::vec3   			m_vObjectTranslate;         ///< Store the 3D object translate component
+    glm::vec3   			m_vObjectEulerAngles;       ///< Store the 3D object orientation as euler angles
+
+    glm::mat4   			m_mtxObjectWorld;           ///< Matrix transform, for object -> world coordinates
+    glm::mat4   			m_mtxCameraView;            ///< Matrix transform, for world -> camera view coordinates
+    glm::mat4   			m_mtxCameraProjection;      ///< Matrix transform, for camera view -> camera projection coordinates
+
+    GLuint      			m_iUniformWorld;            ///< GLSL uniform location for World matrix
+    GLuint      			m_iUniformView;             ///< GLSL uniform location for View matrix
+    GLuint      			m_iUniformProjection;       ///< GLSL uniform location for Projection matrix
+
+    //------------------------------------------------------------------------------------
+    QTime       			m_timer;                    ///< Time used to get elapsed time between 2 frames
+
+    glm::vec3               m_vCameraPosition;          ///< Camera position - in World Space
+    GLuint                  m_iUniformCameraPosition;           ///< GLSL uniform location for light position
+
+    LightProperties         m_lightProp;                ///< Light properties
+    glm::vec3               m_vLightPosition;           ///< Light position  - in World Space
+    GLuint                  m_aiUniformLightProp[3];    ///< GLSL uniform location for each light property
+    GLuint                  m_iUniformLightPosition;    ///< GLSL uniform location for light position
+
+    MaterialProperties      m_materialProp;             ///< Material properties
+    GLuint                  m_aiUniformMaterialProp[4]; ///< GLSL uniform location for each material property
+
+    //------------------------------------------------------------------------------------
+
+    GLuint                  m_iTexture;                 ///< OpenGL ID for TextureObject - used for diffuse texture
+    GLuint                  m_iTexture2;                ///< OpenGL ID for TextureObject - used for emissive texture
+    GLuint                  m_iUniformTextureUnit;      ///< GLSL uniform location for the sampler "u_texDiffuse"
+    GLuint                  m_iUniformTextureUnit2;     ///< GLSL uniform location for the sampler "u_texEmissive"
+
+    bool                    m_bAlphaBlend;              ///< Use Alpha Blending ?
+
+    //------------------------------------------------------------------------------------
+    GLuint                  m_iFBO;                     ///< OpenGL ID for Frame Buffer Object
+    GLuint                  m_iColorRenderTexture;      ///< OpenGL ID for Texture Object - used as Color Buffer on the FBO
+    GLuint                  m_iZRenderBuffer;           ///< OpenGL ID for Render Buffer - used as Z Buffer on the FBO
+
+    GLuint                  m_iUniformSamplerPost;      ///< GLSL uniform location for the sampler "u_tex"
+
+};
+//====================================================================================================================================
+
+
+
+#endif // __MAIN_H__
+
