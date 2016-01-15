@@ -50,6 +50,10 @@ public:
     int getElapsedTime() const;
     void resetElapsedTime();
 
+    float getDistanceToCamera() const;
+    void updateDistanceToCamera(const glm::mat4& objectToWorld, const glm::vec3& cameraWorldPos);
+
+
 private:
 
     //Attributes//
@@ -63,10 +67,11 @@ private:
     float           m_fHeight;          ///< current height of the particle
     float           m_fTtl;            ///< time to live (in float because we need to pass it to the gpu)
 
-    //Non attributes: will be ignored by our vao (but still fetched to the vbo!!)//
-
+    //Non attributes: will be ignored by the vao (but still fetched to the vbo!!)//
     glm::vec3       m_afVelocity;   ///< used by the functors to work according to the current particle's velocity.
-    int             m_iElapsedTime;
+    int             m_iElapsedTime; ///< used to deduce the initial time coupling it with the ttl.
+    float           m_fdistanceCamera; ///< used to sort
+
 };
 #pragma pack(pop)
 

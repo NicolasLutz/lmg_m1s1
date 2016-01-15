@@ -1,6 +1,8 @@
 #include "main.h"
 
-static const float fCameraZInit = 4.f;
+static const float fCameraXInit = 0.f;
+static const float fCameraZInit = 8.f;
+static const float fCameraYInit = 10.f;
 
 //====================================================================================================================================
 TPGLWindow::TPGLWindow()
@@ -12,7 +14,7 @@ TPGLWindow::TPGLWindow()
     , m_iUniformWorld       (0)
     , m_iUniformView        (0)
     , m_iUniformProjection  (0)
-    , m_bUseColor           (GL_FALSE)
+    , m_bUseColor           (GL_TRUE)
     , m_iUniformUseColor    (0)
     , m_iTexture            (0)
     , m_iUniformTextureUnit (0)
@@ -22,13 +24,15 @@ TPGLWindow::TPGLWindow()
     , m_GPUProgram          ()
     , m_ParticleSystem      ()
     , m_funcInit            (glm::vec3(0,0,0.01f))
-    , m_funcPosition        (glm::vec3(0,0,0), 0.3f)
+    , m_funcPosition        (glm::vec3(0,0,1), 0.01f)
     , m_funcColor           ()
     , m_funcRotation        ()
     , m_funcSize            ()
+    , m_bSpreadFire         ( false )
+    , m_funcSpreadFire      ()
     , m_status              (GL_NO_ERROR)
 {
-    m_vCameraPosition   = glm::vec3(0,0,fCameraZInit);
+    m_vCameraPosition   = glm::vec3(fCameraXInit,fCameraYInit,fCameraZInit);
 
     m_timer.start();
 
@@ -88,13 +92,6 @@ void TPGLWindow::getUniformLocations()
     m_iUniformView              = glGetUniformLocation( iProgram, "u_mtxView" );
     m_iUniformProjection        = glGetUniformLocation( iProgram, "u_mtxProjection" );
 
-    m_aiUniformLightProp[0]     = glGetUniformLocation( iProgram, "u_light.vAmbiant" );
-    m_aiUniformLightProp[1]     = glGetUniformLocation( iProgram, "u_light.vDiffuse" );
-    m_aiUniformLightProp[2]     = glGetUniformLocation( iProgram, "u_light.vSpecular" );
-
-    m_iUniformCameraPosition    = glGetUniformLocation( iProgram, "u_vCameraPositionWS" );
-    m_iUniformLightPosition     = glGetUniformLocation( iProgram, "u_vLightPositionWS" );
-
     // Retrieves the uniform location for the texture SAMPLER used in the GLSL Fragment Shader
     m_iUniformTextureUnit       = glGetUniformLocation( iProgram, "u_tex" );
 
@@ -110,13 +107,6 @@ void TPGLWindow::sendUniformsToGPU()
     glUniformMatrix4fv( m_iUniformWorld, 1, GL_FALSE, glm::value_ptr(m_mtxObjectWorld) );
     glUniformMatrix4fv( m_iUniformView, 1, GL_FALSE, glm::value_ptr(m_mtxCameraView) );
     glUniformMatrix4fv( m_iUniformProjection, 1, GL_FALSE, glm::value_ptr(m_mtxCameraProjection) );
-
-    glUniform3fv( m_aiUniformLightProp[0], 1, glm::value_ptr(m_lightProp.m_vAmbiant) );
-    glUniform3fv( m_aiUniformLightProp[1], 1, glm::value_ptr(m_lightProp.m_vDiffuse) );
-    glUniform3fv( m_aiUniformLightProp[2], 1, glm::value_ptr(m_lightProp.m_vSpecular) );
-
-    glUniform3fv( m_iUniformCameraPosition, 1, glm::value_ptr( m_vCameraPosition ) );
-    glUniform3fv( m_iUniformLightPosition, 1, glm::value_ptr( m_vLightPosition ) );
 
     // Specify on which texture unit the uniform texture sampler must be bound
     glUniform1i( m_iUniformTextureUnit, 0 );
@@ -183,10 +173,7 @@ void TPGLWindow::initialize()
     m_GPUProgram.createFromFiles( "VS.glsl", "GS.glsl", "FS.glsl" );
 
     getUniformLocations();
-    //getAttributeLocations();
 
-    //createVBO();
-    //createVAOFromVBO();
     m_ParticleSystem.create(GL_POINTS);
     createTextures();
 
@@ -221,14 +208,10 @@ void TPGLWindow::update()
 
     static int siFrameID        = 0;
 
-    if(siFrameID%2==0)
-        m_ParticleSystem.update(true, m_funcInit, m_funcPosition, m_funcColor, m_funcRotation, m_funcSize);
+    if(!m_bSpreadFire)
+        m_ParticleSystem.update(true, m_funcInit, m_funcPosition, m_funcColor, m_funcRotation, m_funcSize, m_mtxObjectWorld, m_vCameraPosition);
     else
-        m_ParticleSystem.update(false, m_funcInit, m_funcPosition, m_funcColor, m_funcRotation, m_funcSize);
-
-    // Update light position, so that it is animated
-    float   fTimeElapsed        = (float) m_timer.elapsed();
-    m_vLightPosition            = glm::vec3( 100 * cos(fTimeElapsed/1000), 0, 100 * sin(fTimeElapsed/1000) );
+        m_ParticleSystem.update(false, m_funcInit, m_funcSpreadFire, m_funcColor, m_funcRotation, m_funcSize, m_mtxObjectWorld, m_vCameraPosition);
 
 
     // make sure the matrix data are init to some valid values
@@ -254,7 +237,6 @@ void TPGLWindow::render()
     // Enables (Back) Face Culling -----------------------------------------------------------------
     glEnable( GL_CULL_FACE );
     glCullFace( GL_BACK );
-
 
     if( m_bAlphaBlend )
     {
@@ -334,17 +316,15 @@ void TPGLWindow::keyPressEvent(QKeyEvent* _pEvent)
             m_bAlphaBlend = !m_bAlphaBlend;
             break;
 
-
         case Qt::Key_C:
             m_bUseColor = !m_bUseColor;
 
-//        case Qt::Key_P:
-//            writeFBOToFile( "FBO.png" );
-//            break;
+        case Qt::Key_S:
+            m_bSpreadFire = !m_bSpreadFire;
 
         case Qt::Key_R:
             m_vObjectTranslate = glm::vec3(0, 0, 0);
-            m_vCameraPosition  = glm::vec3(0,0,fCameraZInit);
+            m_vCameraPosition  = glm::vec3(fCameraXInit,fCameraYInit,fCameraZInit);
             bHasObjectMoved = true;
             break;
 

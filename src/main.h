@@ -13,34 +13,6 @@
 #include <QtGui/QKeyEvent>
 #include "particlesystem.h"
 
-struct LightProperties
-{
-    glm::vec3   m_vAmbiant;
-    glm::vec3   m_vDiffuse;
-    glm::vec3   m_vSpecular;
-
-    LightProperties()
-    :   m_vAmbiant  ( 0.1f )
-    ,   m_vDiffuse  ( 1.f, 1.f, 1.f )
-    ,   m_vSpecular ( 1.0f, 1.0f, 1.0f )
-    {}
-};
-
-struct MaterialProperties
-{
-    glm::vec3   m_vAmbiant;
-    glm::vec3   m_vDiffuse;
-    glm::vec3   m_vSpecular;
-    float       m_fSpecularPower;
-
-    MaterialProperties()
-    :   m_vAmbiant      ( 0.1f, 0.4f, 0.4f )
-    ,   m_vDiffuse      ( 0.3f, 0.4f, 1.0f )
-    ,   m_vSpecular     ( 0.7f, 0.7f, 0.7f )
-    ,   m_fSpecularPower( 100.f )
-    {}
-};
-
 //------------------------------------------------------------------------------------
 
 
@@ -117,15 +89,6 @@ private:
     QTime       			m_timer;                    ///< Time used to get elapsed time between 2 frames
 
     glm::vec3               m_vCameraPosition;          ///< Camera position - in World Space
-    GLuint                  m_iUniformCameraPosition;           ///< GLSL uniform location for light position
-
-    LightProperties         m_lightProp;                ///< Light properties
-    glm::vec3               m_vLightPosition;           ///< Light position  - in World Space
-    GLuint                  m_aiUniformLightProp[3];    ///< GLSL uniform location for each light property
-    GLuint                  m_iUniformLightPosition;    ///< GLSL uniform location for light position
-
-    MaterialProperties      m_materialProp;             ///< Material properties
-    GLuint                  m_aiUniformMaterialProp[4]; ///< GLSL uniform location for each material property
 
     GLboolean               m_bUseColor;                ///< Whether or not additional color is used on particles
     GLuint                  m_iUniformUseColor;         ///< GLSL uniform location for particles' color usage
@@ -143,11 +106,14 @@ private:
 
     ParticleSystem          m_ParticleSystem;
 
-    Func_UpdateParticle_Init_Spread                           m_funcInit;
-    Func_UpdateParticle_Position_Acceleration_RandomSpread     m_funcPosition;
-    Func_UpdateParticle_Color_NoChange                      m_funcColor;
-    Func_UpdateParticle_Rotation_NoChange                   m_funcRotation;
-    Func_UpdateParticle_Size_NoChange                       m_funcSize;
+    Func_UpdateParticle_Init_Spread                         m_funcInit;
+    Func_UpdateParticle_Position_Direction_Converge         m_funcPosition;
+    Func_UpdateParticle_Color_Vanish                        m_funcColor;
+    Func_UpdateParticle_Rotation_RotateAngle                m_funcRotation;
+    Func_UpdateParticle_Size_ScaleAtCap                     m_funcSize;
+
+    bool                                                    m_bSpreadFire;
+    Func_UpdateParticle_Position_Acceleration_RandomSpread  m_funcSpreadFire;
 
     GLint                   m_status;
 

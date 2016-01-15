@@ -19,17 +19,18 @@ out vec4 out_fragColor;
 
 void main (void)
 {
-    vec4 t;
+    debug=true;
 
-    if(u_bUseColor)
-    {
-	t=texture2D(u_tex,gs_vST)*gs_vColor;
-    }
+    vec4 t=texture2D(u_tex,gs_vST);
+    if(t.a == 0 || gs_fTtl <= 0)
+      discard;
+    if(debug)
+	out_fragColor = t;
     else
     {
-	t=texture2D(u_tex,gs_vST);
+        if(u_bUseColor)
+            out_fragColor = t + gs_vColor;
+        else
+            out_fragColor = t;
     }
-    if(t.a <= 0.005f)
-      discard;
-    out_fragColor = t;
 }

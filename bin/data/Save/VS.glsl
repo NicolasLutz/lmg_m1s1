@@ -16,12 +16,8 @@ layout(location=5)  in float f_ttl;      //time to live: discard if <=0
 //out
 
 out vec4    vs_vColor;
-
-out float   vs_fRotation;
-
 out float   vs_fWidth;
 out float   vs_fHeight;
-
 out float   vs_fTtl;
 
 //debug
@@ -29,16 +25,31 @@ bool debug;
 
 void main()
 {
+    debug=true;
+
 
     vec4 vWorldPosition = u_mtxWorld * vec4( vtx_position, 1.0f );
 
     //out
 
-    gl_Position = u_mtxProjection * u_mtxView * vWorldPosition;
-
-    vs_vColor=vtx_color;
-    vs_fRotation=f_rotation;
-    vs_fWidth=f_width;
-    vs_fHeight=f_height;
-    vs_fTtl=f_ttl;
+    if(f_ttl<=10.0f)
+    {
+	gl_Position = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    }
+    else
+	gl_Position = u_mtxProjection * u_mtxView * vWorldPosition;
+    if(debug)
+    {
+        vs_vColor=vec4(vtx_position, 1.0f);
+        vs_fWidth=0.2f;
+        vs_fHeight=0.2f;
+        vs_fTtl=0;
+    }
+    else
+    {
+        vs_vColor=vtx_color;
+        vs_fWidth=f_width;
+        vs_fHeight=f_height;
+        vs_fTtl=f_ttl;
+    }
 }

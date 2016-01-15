@@ -101,3 +101,16 @@ void Particle::resetElapsedTime()
 {
     m_iElapsedTime=0;
 }
+
+float Particle::getDistanceToCamera() const
+{
+    return m_fdistanceCamera;
+}
+
+void Particle::updateDistanceToCamera(const glm::mat4& objectToWorld, const glm::vec3& cameraWorldPos)
+{
+    glm::vec3 worldPosition=glm::vec3(objectToWorld*glm::vec4(m_afPosition,1.0f));
+    m_fdistanceCamera=glm::distance(worldPosition, cameraWorldPos);
+}
+
+//===============================
