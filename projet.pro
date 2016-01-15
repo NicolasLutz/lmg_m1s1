@@ -7,6 +7,7 @@ Release:TARGET      = projet
 
 QT = opengl
 QT += gui
+CONFIG += c++11
 
 DESTDIR = $$PWD/bin
 
@@ -33,25 +34,27 @@ INCLUDEPATH += include/
 VPATH   =   $$PWD/src
 HEADERS +=  openglwindow.h \
             main.h \
-    src/GPUProgram.h \
-    src/common.h \
-    src/Mesh.h
+            src/GPUProgram.h \
+            src/common.h \
+            src/particlesystem.h \
+            src/particle.h \
+            src/func_updateparticles.h
 
 SOURCES +=  openglwindow.cpp \
             main.cpp \
-    src/GPUProgram.cpp \
-    src/common.cpp \
-    src/Mesh.cpp
+            src/GPUProgram.cpp \
+            src/common.cpp \
+            src/particlesystem.cpp \
+            src/particle.cpp \
+            src/func_updateparticles.cpp
 
-DISTFILES += \
-    data/FS_blit.glsl \
-    data/VS_blit.glsl
+DISTFILES +=
 
 win32:LIBS      += -lopengl32
 
 macx:LIBS       += -L$${PWD}/../deps/glew/lib/
 macx:LIBS       += -lGLEW -lGLU
-	
+
 unix!macx:LIBS  += -L$${PWD}/../deps/glew/lib/
 unix!macx:LIBS  += -lGLEW -lGLU
 

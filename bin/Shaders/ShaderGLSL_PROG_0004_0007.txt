@@ -1,0 +1,136 @@
+
+//== PROGRAM LINK STATUS = TRUE
+//== PROGRAM VALIDATE STATUS = TRUE
+
+//======================================================
+//   Vertex Shader 1 
+//======================================================
+
+//== SHADER COMPILE STATUS = TRUE
+#version 330
+
+//uniform
+
+uniform mat4 u_mtxWorld, u_mtxView, u_mtxProjection;
+
+//in
+
+layout(location=0)  in vec3 vtx_position; //position of the particle
+layout(location=1)  in vec4 vtx_color;  //color of the particle
+layout(location=2)  in float f_rotation; //rotation of the particle
+layout(location=3)  in float f_width;    //current width of the particle
+layout(location=4)  in float f_height;   //current height of the particle
+layout(location=5)  in float f_ttl;      //time to live: discard if <=0
+
+//out
+
+out vec4    vs_vColor;
+out float   vs_fWidth;
+out float   vs_fHeight;
+out float   vs_fTtl;
+
+//debug
+bool debug;
+
+void main()
+{
+
+    vec4 vWorldPosition = u_mtxWorld * vec4( vtx_position, 1.0f );
+
+    //out
+
+    gl_Position = u_mtxProjection * u_mtxView * vWorldPosition;
+
+    vs_vColor=vtx_color;
+    vs_fWidth=f_width;
+    vs_fHeight=f_height;
+    vs_fTtl=f_ttl;
+}
+
+//======================================================
+//   Geometry Shader 3 
+//======================================================
+
+//== SHADER COMPILE STATUS = TRUE
+#version 330
+
+//in
+
+layout (points) in ;
+in vec4    vs_vColor[];
+in float   vs_fWidth[];
+in float   vs_fHeight[];
+in float   vs_fTtl[];
+
+//out
+
+layout (triangle_strip, max_vertices=4) out;
+out vec4    gs_vColor;
+out float   gs_fTtl;
+out vec2    gs_vST;
+
+void main()
+{
+    float wDiv2=vs_fWidth[0]*0.5f;
+    float hDiv2=vs_fHeight[0]*0.5f;
+
+    gl_Position = gl_in[0].gl_Position+vec4(-wDiv2,-hDiv2,0,0);
+    gs_vColor=vs_vColor[0];
+    gs_fTtl=vs_fTtl[0];
+    gs_vST=vec2(0,0);
+    EmitVertex();
+
+    gl_Position = gl_in[0].gl_Position+vec4(wDiv2,-hDiv2,0,0);
+    gs_vColor=vs_vColor[0];
+    gs_fTtl=vs_fTtl[0];
+    gs_vST=vec2(1,0);
+    EmitVertex();
+
+    gl_Position = gl_in[0].gl_Position+vec4(-wDiv2,hDiv2,0,0);
+    gs_vColor=vs_vColor[0];
+    gs_fTtl=vs_fTtl[0];
+    gs_vST=vec2(0,1);
+    EmitVertex();
+
+    gl_Position = gl_in[0].gl_Position+vec4(wDiv2,hDiv2,0,0);
+    gs_vColor=vs_vColor[0];
+    gs_fTtl=vs_fTtl[0];
+    gs_vST=vec2(1,1);
+    EmitVertex();
+    EndPrimitive();
+}
+
+//======================================================
+//   Fragment Shader 2
+//======================================================
+
+//== SHADER COMPILE STATUS = TRUE
+#version 330
+
+bool debug;
+
+// sampler for the RGBA texture used by the billboard
+uniform sampler2D u_tex;
+uniform bool u_bUseColor;
+
+// we should use this, instead of gl_FragColor which is deprecated since GL version 3.0
+//in
+
+in vec4    gs_vColor;
+in float   gs_fTtl;
+in vec2    gs_vST;
+
+//out
+
+out vec4 out_fragColor;
+
+void main (void)
+{
+    vec4 t=texture2D(u_tex,gs_vST);
+    if(t.a == 0)
+      discard;
+    if(u_bUseColor)
+	out_fragColor = t + gs_vColor;
+    else
+	out_fragColor = t;
+}

@@ -6,7 +6,6 @@
 #include <QtGui/QOpenGLPaintDevice>
 #include <QtGui/QPainter>
 
-
 //====================================================================================================================================
 OpenGLWindow::OpenGLWindow( QWindow* _pParent )
     : QWindow           ( _pParent )

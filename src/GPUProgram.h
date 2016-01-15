@@ -46,6 +46,8 @@ private:
     GLuint      			m_iGPUVertexShaderID;       ///< OpenGL ID for GPU VertexShader
     GLuint      			m_iGPUGeometryShaderID;     ///< OpenGL ID for GPU GeometryShader - optional
     GLuint      			m_iGPUFragmentShaderID;     ///< OpenGL ID for GPU FragmentShader
+
+    GLint                   m_status;
 };
 
 

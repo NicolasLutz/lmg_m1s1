@@ -6,6 +6,7 @@ GPUProgram::GPUProgram()
     ,   m_iGPUVertexShaderID  ( 0 )
     ,   m_iGPUFragmentShaderID( 0 )
     ,   m_iGPUGeometryShaderID( 0 )
+    ,   m_status(GL_NO_ERROR)
 {
 }
 //====================================================================================================================================
@@ -49,6 +50,7 @@ bool GPUProgram::createFromFiles( const std::string& _rstrVertexShaderPath, cons
     // required to have the OpenGL functions working - this is because of our use of OpenGL with Qt
     initializeOpenGLFunctions();
 
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 
     const bool bUseGeometryShader = "" != _rstrGeometryShaderPath;
 
@@ -108,7 +110,11 @@ bool GPUProgram::createFromFiles( const std::string& _rstrVertexShaderPath, cons
     TP_ASSERT( 0 == m_iGPUGeometryShaderID ,    "m_iGPUGeometryShaderID should be 0 (here it is '%d')   - Was destroyShader() called on this one ?.\n", m_iGPUGeometryShaderID );
     TP_ASSERT( 0 == m_iGPUFragmentShaderID ,    "m_iGPUFragmentShaderID should be 0 (here it is '%d')   - Was destroyShader() called on this one ?.\n", m_iGPUFragmentShaderID );
     //--------------------------------------------------------------------------------------------------------------------
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
+
+    return true;
 }
+
 //====================================================================================================================================
 void GPUProgram::destroy()
 {
@@ -120,6 +126,7 @@ void GPUProgram::destroy()
     glDeleteProgram( m_iGPUProgramID );
     m_iGPUProgramID = 0;
 }
+
 //====================================================================================================================================
 GLuint GPUProgram::createShader( const std::string& _rstrShaderPath, GLenum _eShaderType )
 {
@@ -144,6 +151,7 @@ GLuint GPUProgram::createShader( const std::string& _rstrShaderPath, GLenum _eSh
 
     return iShader;
 }
+
 //====================================================================================================================================
 void GPUProgram::destroyShader( GLuint& _rOutShaderID )
 {
@@ -155,6 +163,7 @@ void GPUProgram::destroyShader( GLuint& _rOutShaderID )
     glDeleteShader( _rOutShaderID );
     _rOutShaderID = 0;
 }
+
 //====================================================================================================================================
 bool GPUProgram::printShaderCompileInfo( GLuint _iShaderID, const std::string& _strMsg )
 {

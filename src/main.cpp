@@ -1,9 +1,6 @@
 #include "main.h"
 
-
-
 static const float fCameraZInit = 4.f;
-
 
 //====================================================================================================================================
 TPGLWindow::TPGLWindow()
@@ -15,17 +12,21 @@ TPGLWindow::TPGLWindow()
     , m_iUniformWorld       (0)
     , m_iUniformView        (0)
     , m_iUniformProjection  (0)
+    , m_bUseColor           (GL_FALSE)
+    , m_iUniformUseColor    (0)
     , m_iTexture            (0)
-    , m_iTexture2           (0)
     , m_iUniformTextureUnit (0)
-    , m_iUniformTextureUnit2(0)
-    , m_bAlphaBlend         ( false )
+    , m_bAlphaBlend         ( true )
     , m_iFBO                ( 0 ) //--------------------------------------
     , m_iColorRenderTexture ( 0 )
-    , m_iZRenderBuffer      ( 0 )
-    , m_GPUProgramPhongTextured    ()
-    , m_MeshSphere          ()
-    , m_MeshScreen          ()
+    , m_GPUProgram          ()
+    , m_ParticleSystem      ()
+    , m_funcInit            (glm::vec3(0,0,0.01f))
+    , m_funcPosition        (glm::vec3(0,0,0), 0.3f)
+    , m_funcColor           ()
+    , m_funcRotation        ()
+    , m_funcSize            ()
+    , m_status              (GL_NO_ERROR)
 {
     m_vCameraPosition   = glm::vec3(0,0,fCameraZInit);
 
@@ -36,55 +37,12 @@ TPGLWindow::TPGLWindow()
 }
 
 //====================================================================================================================================
-void TPGLWindow::createRenderTarget()
-{
-    // Creates the Frame Buffer Object - FBO - that will be used as a replacement for the default Frame Buffer -----------------
-    glGenFramebuffers( 1, & m_iFBO );
-    glBindFramebuffer( GL_FRAMEBUFFER, m_iFBO );
-
-    // Creates the Texture Object that will be used as color buffer ------------------------------------------------------------
-    glGenTextures( 1 , & m_iColorRenderTexture );
-
-    // "Bind" the created texture : all future texture functions will modify this texture
-    glBindTexture( GL_TEXTURE_2D, m_iColorRenderTexture );
-
-    const float retinaScale = devicePixelRatio();
-    GLsizei W = width() * retinaScale;
-    GLsizei H =  height() * retinaScale;
-
-    // Put an empty image to OpenGL - see the last "0"
-    glTexImage2D( GL_TEXTURE_2D, 0,GL_RGB, W,  H, 0,GL_RGB, GL_UNSIGNED_BYTE, 0 );
-
-    // Required - but no need for a linea filtering
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-
-    // Set "m_iColorRenderTexture" as the color_buffer_0
-    glFramebufferTexture( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_iColorRenderTexture, 0 );
-
-
-    // Creates the Render Buffer that will be used as Z buffer -----------------------------------------------------------------
-    glGenRenderbuffers( 1, & m_iZRenderBuffer );
-    glBindRenderbuffer( GL_RENDERBUFFER, m_iZRenderBuffer );
-    glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH_COMPONENT, W, H );
-    glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_iZRenderBuffer );
-
-    // Specify list of draw buffers --------------------------------------------------------------------------------------------
-    GLenum aDrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
-    glDrawBuffers( 1, aDrawBuffers );
-
-    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-
-    // Make sure the FBO has been created properly
-    TP_ASSERT( glCheckFramebufferStatus( GL_FRAMEBUFFER ) == GL_FRAMEBUFFER_COMPLETE, "FBO %d creation is incomplete!\n ", m_iFBO );
-}
-
-//====================================================================================================================================
 void TPGLWindow::destroyRenderTarget()
 {
-    glDeleteRenderbuffers( 1, & m_iZRenderBuffer );
     glDeleteTextures( 1 , & m_iColorRenderTexture );
     glDeleteFramebuffers( 1, & m_iFBO );
+
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 }
 
 //====================================================================================================================================
@@ -93,6 +51,8 @@ void TPGLWindow::bindRenderTarget()
     glBindFramebuffer( GL_FRAMEBUFFER, m_iFBO );
     const float retinaScale = devicePixelRatio();
     glViewport( 0, 0, width() * retinaScale, height() * retinaScale );
+
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 }
 
 //====================================================================================================================================
@@ -101,15 +61,15 @@ void TPGLWindow::unbindRenderTarget()
     glBindFramebuffer( GL_FRAMEBUFFER, 0 );
     const float retinaScale = devicePixelRatio();
     glViewport( 0, 0, width() * retinaScale, height() * retinaScale );
+
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 }
 
 //====================================================================================================================================
 TPGLWindow::~TPGLWindow()
 {
-    m_GPUProgramPhongTextured.destroy();
-    m_GPUProgramPostProcess.destroy();
+    m_GPUProgram.destroy();
 
-    destroyMesh();
     destroyTextures();
     destroyRenderTarget();
 }
@@ -119,34 +79,28 @@ void TPGLWindow::getUniformLocations()
 {
     //--------------------------------------------------------------------------------------------------------------------
     // precondition
-    TP_ASSERT( 0 != m_GPUProgramPhongTextured.getID() , "m_GPUProgramNormal.getID() should not be 0 (here it is '%d') - Did you call createFromFiles() on it ?.\n", m_GPUProgramPhongTextured.getID() );
+    TP_ASSERT( 0 != m_GPUProgram.getID() , "m_GPUProgram.getID() should not be 0 (here it is '%d') - Did you call createFromFiles() on it ?.\n", m_GPUProgram.getID() );
     //--------------------------------------------------------------------------------------------------------------------
 
-    const GLuint iProgram = m_GPUProgramPhongTextured.getID();
-
-    m_aiUniformLightProp[0]     = glGetUniformLocation( iProgram, "u_light.vAmbiant" );
-    m_aiUniformLightProp[1]     = glGetUniformLocation( iProgram, "u_light.vDiffuse" );
-    m_aiUniformLightProp[2]     = glGetUniformLocation( iProgram, "u_light.vSpecular" );
-
-    m_aiUniformMaterialProp[0]  = glGetUniformLocation( iProgram, "u_material.vAmbiant" );
-    m_aiUniformMaterialProp[1]  = glGetUniformLocation( iProgram, "u_material.vDiffuse" );
-    m_aiUniformMaterialProp[2]  = glGetUniformLocation( iProgram, "u_material.vSpecular" );
-    m_aiUniformMaterialProp[3]  = glGetUniformLocation( iProgram, "u_material.fSpecPower" );
-
-    m_iUniformCameraPosition    = glGetUniformLocation( iProgram, "u_vCameraPositionWS" );
-    m_iUniformLightPosition     = glGetUniformLocation( iProgram, "u_vLightPositionWS" );
-
+    const GLuint iProgram = m_GPUProgram.getID();
 
     m_iUniformWorld             = glGetUniformLocation( iProgram, "u_mtxWorld" );
     m_iUniformView              = glGetUniformLocation( iProgram, "u_mtxView" );
     m_iUniformProjection        = glGetUniformLocation( iProgram, "u_mtxProjection" );
 
-    // Retrieves the uniform location for the texture SAMPLER used in the GLSL Fragment Shader
-    m_iUniformTextureUnit       = glGetUniformLocation( iProgram, "u_texDiffuse" );
-    m_iUniformTextureUnit2      = glGetUniformLocation( iProgram, "u_texEmissive" );
+    m_aiUniformLightProp[0]     = glGetUniformLocation( iProgram, "u_light.vAmbiant" );
+    m_aiUniformLightProp[1]     = glGetUniformLocation( iProgram, "u_light.vDiffuse" );
+    m_aiUniformLightProp[2]     = glGetUniformLocation( iProgram, "u_light.vSpecular" );
+
+    m_iUniformCameraPosition    = glGetUniformLocation( iProgram, "u_vCameraPositionWS" );
+    m_iUniformLightPosition     = glGetUniformLocation( iProgram, "u_vLightPositionWS" );
 
     // Retrieves the uniform location for the texture SAMPLER used in the GLSL Fragment Shader
-    m_iUniformSamplerPost       = glGetUniformLocation( m_GPUProgramPostProcess.getID(), "u_tex" );
+    m_iUniformTextureUnit       = glGetUniformLocation( iProgram, "u_tex" );
+
+    m_iUniformUseColor          = glGetUniformLocation( iProgram, "u_bUseColor");
+
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 }
 
 //====================================================================================================================================
@@ -157,15 +111,9 @@ void TPGLWindow::sendUniformsToGPU()
     glUniformMatrix4fv( m_iUniformView, 1, GL_FALSE, glm::value_ptr(m_mtxCameraView) );
     glUniformMatrix4fv( m_iUniformProjection, 1, GL_FALSE, glm::value_ptr(m_mtxCameraProjection) );
 
-
     glUniform3fv( m_aiUniformLightProp[0], 1, glm::value_ptr(m_lightProp.m_vAmbiant) );
     glUniform3fv( m_aiUniformLightProp[1], 1, glm::value_ptr(m_lightProp.m_vDiffuse) );
     glUniform3fv( m_aiUniformLightProp[2], 1, glm::value_ptr(m_lightProp.m_vSpecular) );
-
-    glUniform3fv( m_aiUniformMaterialProp[0], 1, glm::value_ptr(m_materialProp.m_vAmbiant) );
-    glUniform3fv( m_aiUniformMaterialProp[1], 1, glm::value_ptr(m_materialProp.m_vDiffuse) );
-    glUniform3fv( m_aiUniformMaterialProp[2], 1, glm::value_ptr(m_materialProp.m_vSpecular) );
-    glUniform1f( m_aiUniformMaterialProp[3], m_materialProp.m_fSpecularPower );
 
     glUniform3fv( m_iUniformCameraPosition, 1, glm::value_ptr( m_vCameraPosition ) );
     glUniform3fv( m_iUniformLightPosition, 1, glm::value_ptr( m_vLightPosition ) );
@@ -173,130 +121,21 @@ void TPGLWindow::sendUniformsToGPU()
     // Specify on which texture unit the uniform texture sampler must be bound
     glUniform1i( m_iUniformTextureUnit, 0 );
 
-    // Specify on which texture unit the uniform texture sampler must be bound
-    glUniform1i( m_iUniformTextureUnit2 , 1 );
+    glUniform1i( m_iUniformUseColor,  m_bUseColor);
+
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 }
-
-//====================================================================================================================================
-void TPGLWindow::createMesh()
-{
-    // Creates a Sphere Mesh - rendered as points !
-    {
-
-        uint     iParaCount  = 40;
-        uint     iMeriCount  = 60;
-        float   r           = 0.8f;
-
-        // Create a sphere --------------------------------------------------------------------------------
-        GLuint iVertexCount = iParaCount * iMeriCount;
-
-        glm::vec3* afPositions  = new glm::vec3[ iVertexCount ];
-        glm::vec2* afTexCoords  = new glm::vec2[ iVertexCount ];
-
-        float a1 = ( 180.0 / ( iParaCount + 1 ) ) * M_PI / 180.0;
-        float a2 = ( 360.0 / ( iMeriCount - 1 ) ) * M_PI / 180.0;
-
-        // parallels ---------------------------------------------------------------------------------------
-        uint k = 0;
-        for( uint i = 0; i < iParaCount; ++i )
-        {
-            float fAngle    = - M_PI / 2.0 + a1 * ( i + 1 );
-            float z         = r * sin( fAngle );
-            float fRadius   = r * cos( fAngle );
-
-            for( uint j = 0; j < iMeriCount; ++j )
-            {
-                afPositions[ k ] = glm::vec3( fRadius * cos( a2 * j ), fRadius * sin( a2 * j ), z );
-                afTexCoords[ k ] = glm::vec2( float( j )/ iMeriCount, float( iParaCount - i ) / iParaCount );
-                k++;
-            }
-        }
-
-        // compute normals --------------------------------------------------------------------------------
-        // on a 0 centered sphere : you just need to normalise the position!
-        glm::vec3* afNormals = new glm::vec3[ iVertexCount ];
-
-        for( uint i = 0; i < iVertexCount; ++i )
-        {
-            afNormals[ i ] = glm::normalize( afPositions[ i ] );
-        }
-
-        GLuint iElementsCount = ( iMeriCount - 1 ) * ( iParaCount - 1 ) * 2 * 3;  // for quads split in 2
-
-        GLuint* auiIndices = new GLuint[ iElementsCount ];
-
-        k=0;
-        for( uint i = 0; i < ( iParaCount - 1 ); ++i )
-        {
-            for( uint j = 0; j < ( iMeriCount - 1 ); ++j )
-            {
-                auiIndices[ k++ ] = iMeriCount * i + j;
-                auiIndices[ k++ ] = iMeriCount * i + ( j + 1 );
-                auiIndices[ k++ ] = iMeriCount * ( i + 1 ) + ( j + 1 );
-                auiIndices[ k++ ] = iMeriCount * ( i + 1 ) + ( j + 1 );
-                auiIndices[ k++ ] = iMeriCount * ( i + 1 ) + j;
-                auiIndices[ k++ ] = iMeriCount * i + j;
-            }
-        }
-
-        m_MeshSphere.createFrom( GL_TRIANGLES, iVertexCount, afPositions, afNormals, afTexCoords, iElementsCount, auiIndices );
-
-        delete [] afPositions;
-        delete [] afNormals;
-        delete [] afTexCoords;
-        delete [] auiIndices;
-    }
-
-
-    // Creates the Screen Mesh - used to blit the FBO texture onto the screen
-    {
-        const GLfloat afPositions[] =   { -1.0f,  1.0f, 0.0f
-                                        , -1.0f, -1.0f, 0.0f
-                                        , 1.0f,  1.0f, 0.0f
-                                        , 1.0f, -1.0f, 0.0f
-                                        };
-
-        const GLfloat afUVs[] = { 0.0f, 1.0f
-                                , 0.0f, 0.0f
-                                , 1.0f, 1.0f
-                                , 1.0f, 0.0f
-                                };
-
-        m_MeshScreen.createFrom( GL_TRIANGLE_STRIP, 4, (glm::vec3*) afPositions, 0, (glm::vec2*) afUVs, 0, 0 );
-    }
-}
-
-//====================================================================================================================================
-void TPGLWindow::destroyMesh()
-{
-    m_MeshScreen.destroy();
-
-    m_MeshSphere.destroy();
-}
-
-
 
 //====================================================================================================================================
 void TPGLWindow::createTextures()
 {
     // IMAGE EARTH
-    // pDataImage0 : POINTER on IMAGE RGB (3 bytes per pixel)
-    std::string filename = TP_PATH_TO_DATA "/earth.png";
+    // pDataImage0 : POINTER on IMAGE RGBA (4 bytes per pixel)
+    std::string filename = TP_PATH_TO_DATA "/Particles/fire4_alpha.png";
     QImage img(filename.c_str());
-    QImage img0 = img.convertToFormat(QImage::Format_RGB888,Qt::NoOpaqueDetection);
+    QImage img0 = img.convertToFormat(QImage::Format_RGBA8888_Premultiplied,Qt::NoOpaqueDetection);
 
     unsigned char* pDataImage0 = img0.scanLine(0);
-
-
-    // IMAGE EARTH BY NIGHT :
-    // pDataImage1 : POINTER on IMAGE RGB (3 bytes per pixel)
-    filename = TP_PATH_TO_DATA "/earth_night.png";
-    img = QImage(filename.c_str());
-    QImage img1 = img.convertToFormat(QImage::Format_RGB888,Qt::NoOpaqueDetection);
-
-    unsigned char* pDataImage1 = img1.scanLine(0);
-
-
 
     glEnable(GL_TEXTURE_2D);
 
@@ -310,31 +149,17 @@ void TPGLWindow::createTextures()
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
 
-        glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB8, img0.width(), img0.height(), 0, GL_RGB, GL_UNSIGNED_BYTE, pDataImage0 );
+        glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, img0.width(), img0.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, pDataImage0 );
     }
     glBindTexture( GL_TEXTURE_2D, 0 );
 
-
-    // Creates the Texture object
-    glGenTextures( 1, & m_iTexture2 );
-
-    glBindTexture( GL_TEXTURE_2D, m_iTexture2 );
-    {
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
-
-        glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB8, img1.width(), img1.height(), 0, GL_RGB, GL_UNSIGNED_BYTE, pDataImage1 );
-    }
-    glBindTexture( GL_TEXTURE_2D, 0 );
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 }
 
 //====================================================================================================================================
 void TPGLWindow::destroyTextures()
 {
     glDeleteTextures( 1, & m_iTexture );
-    glDeleteTextures( 1, & m_iTexture2 );
 }
 
 //====================================================================================================================================
@@ -346,9 +171,7 @@ void TPGLWindow::setupTexturesInUnit()
     //
     glBindTexture( GL_TEXTURE_2D, m_iTexture );
 
-    glActiveTexture( GL_TEXTURE0 + 1 );
-    //
-    glBindTexture( GL_TEXTURE_2D, m_iTexture2 );
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 }
 
 //====================================================================================================================================
@@ -357,15 +180,17 @@ void TPGLWindow::initialize()
     // Prints the GL Version
     TP_LOG("GL Version : %s\n",(char*)glGetString(GL_VERSION));
 
-    m_GPUProgramPhongTextured.createFromFiles( "VS_phong_textured.glsl", "", "FS_phong_textured.glsl" );
-    m_GPUProgramPostProcess.createFromFiles( "VS_blit.glsl", "", "FS_blit.glsl" );
+    m_GPUProgram.createFromFiles( "VS.glsl", "GS.glsl", "FS.glsl" );
 
     getUniformLocations();
-    createMesh();
+    //getAttributeLocations();
+
+    //createVBO();
+    //createVAOFromVBO();
+    m_ParticleSystem.create(GL_POINTS);
     createTextures();
 
-    // ------------------------------------
-    createRenderTarget();
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 }
 
 //====================================================================================================================================
@@ -394,16 +219,24 @@ void TPGLWindow::update()
 {
     // NB : Just like render(), this method is called every frame, as often/fast as possible
 
-//    static int siFrameID        = 0;
+    static int siFrameID        = 0;
+
+    if(siFrameID%2==0)
+        m_ParticleSystem.update(true, m_funcInit, m_funcPosition, m_funcColor, m_funcRotation, m_funcSize);
+    else
+        m_ParticleSystem.update(false, m_funcInit, m_funcPosition, m_funcColor, m_funcRotation, m_funcSize);
 
     // Update light position, so that it is animated
     float   fTimeElapsed        = (float) m_timer.elapsed();
     m_vLightPosition            = glm::vec3( 100 * cos(fTimeElapsed/1000), 0, 100 * sin(fTimeElapsed/1000) );
 
+
     // make sure the matrix data are init to some valid values
     updateMatrices();
 
-//    siFrameID++;
+    siFrameID++;
+
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 }
 
 //====================================================================================================================================
@@ -428,13 +261,13 @@ void TPGLWindow::render()
         // Disables Depth Test --------------------------------------------------------------------------
         glDisable( GL_DEPTH_TEST );
 
-        // Enables Depth Write -------------------------------------------------------------------------
+        // Disables Depth Write -------------------------------------------------------------------------
         glDepthMask( GL_FALSE );
 
         // Enables Alpha Blending ----------------------------------------------------------------------
         glEnable( GL_BLEND );
         glBlendFunc( GL_ONE, GL_ONE_MINUS_SRC_ALPHA );
-    //    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+        //glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
     }
     else
     {
@@ -450,14 +283,14 @@ void TPGLWindow::render()
     }
 
     // Specify the color to use when clearing theframebuffer --------------------------------------
-    glClearColor( 0.05f, 0.2f, 0.3f, 1.0f );
+    glClearColor( 0, 0, 0, 1.0f );
 
     // Clears the framebuffer ---------------------------------------------------------------------
     glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT );
 
 
     // Starts using the given GPU Program ---------------------------------------------------------
-    m_GPUProgramPhongTextured.bind();
+    m_GPUProgram.bind();
     {
         // Setup the Texture to be used
         setupTexturesInUnit();
@@ -465,32 +298,14 @@ void TPGLWindow::render()
         // Sends the uniforms var from the CPU to the GPU -----------------------------------------
         sendUniformsToGPU();
 
-        m_MeshSphere.draw();
-
+        m_ParticleSystem.draw();
     }
     // Stops using the GPU Program ----------------------------------------------------------------
-    m_GPUProgramPhongTextured.unbind();
+    m_GPUProgram.unbind();
 
     unbindRenderTarget();
 
-
-    // TODO : draw the FOB color texture onto a screen quad
-
-    // Clears the framebuffer ---------------------------------------------------------------------
-    glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT );
-
-    m_GPUProgramPostProcess.bind();
-    {
-        glActiveTexture( GL_TEXTURE0 + 0 );
-
-        glBindTexture( GL_TEXTURE_2D, m_iColorRenderTexture );
-
-        // Specify on which texture unit the uniform texture sampler must be bound
-        glUniform1i( m_iUniformSamplerPost, 0 );
-
-        m_MeshScreen.draw();
-    }
-    m_GPUProgramPostProcess.unbind();
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 }
 
 
@@ -519,9 +334,13 @@ void TPGLWindow::keyPressEvent(QKeyEvent* _pEvent)
             m_bAlphaBlend = !m_bAlphaBlend;
             break;
 
-        case Qt::Key_P:
-            writeFBOToFile( "FBO.png" );
-            break;
+
+        case Qt::Key_C:
+            m_bUseColor = !m_bUseColor;
+
+//        case Qt::Key_P:
+//            writeFBOToFile( "FBO.png" );
+//            break;
 
         case Qt::Key_R:
             m_vObjectTranslate = glm::vec3(0, 0, 0);
@@ -598,6 +417,8 @@ void TPGLWindow::writeFBOToFile( const std::string& _rstrFilePath )
     qImage = qImage.rgbSwapped();
 
     qImage.save( _rstrFilePath.c_str() );
+
+    TP_ASSERT((m_status=glGetError())==GL_NO_ERROR,"error: %s\n",gluErrorString(m_status));
 }
 
 

@@ -5,16 +5,13 @@
 
 #include "common.h"
 #include "GPUProgram.h"
-#include "Mesh.h"
 
 
 #include <QTime>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QScreen>
 #include <QtGui/QKeyEvent>
-
-
-
+#include "particlesystem.h"
 
 struct LightProperties
 {
@@ -74,13 +71,6 @@ private:
     /// Send the uniform vars from the CPU to the GPU
     void sendUniformsToGPU();
 
-     //------------------------------------------------------------------------------------
-    /// Creates the VertexBufferObject that contains the geometry position
-    void createMesh();
-
-    /// Destroys the VertexArrayObject created earlier
-    void destroyMesh();
-
     //------------------------------------------------------------------------------------
     /// Update the CameraProjection, CameraView, ObjectWorld matrices
     void updateMatrices();
@@ -96,9 +86,6 @@ private:
     void setupTexturesInUnit();
 
     //------------------------------------------------------------------------------------
-    /// Creates the RenderTarget - FBO, TextureObject for color buffer, RenderBuffer for Z buffer
-    void createRenderTarget();
-
     /// Destroys all RenderTarget related data
     void destroyRenderTarget();
 
@@ -112,12 +99,7 @@ private:
     void writeFBOToFile( const std::string& _rstrFilePath );
 
 
-    GPUProgram              m_GPUProgramPhongTextured;
-    GPUProgram              m_GPUProgramPostProcess;
-
-    Mesh                    m_MeshSphere;
-    Mesh                    m_MeshScreen;
-    Mesh                    m_MeshCharacter;
+    GPUProgram              m_GPUProgram;
 
     //------------------------------------------------------------------------------------
     glm::vec3   			m_vObjectTranslate;         ///< Store the 3D object translate component
@@ -145,21 +127,29 @@ private:
     MaterialProperties      m_materialProp;             ///< Material properties
     GLuint                  m_aiUniformMaterialProp[4]; ///< GLSL uniform location for each material property
 
+    GLboolean               m_bUseColor;                ///< Whether or not additional color is used on particles
+    GLuint                  m_iUniformUseColor;         ///< GLSL uniform location for particles' color usage
+
     //------------------------------------------------------------------------------------
 
     GLuint                  m_iTexture;                 ///< OpenGL ID for TextureObject - used for diffuse texture
-    GLuint                  m_iTexture2;                ///< OpenGL ID for TextureObject - used for emissive texture
-    GLuint                  m_iUniformTextureUnit;      ///< GLSL uniform location for the sampler "u_texDiffuse"
-    GLuint                  m_iUniformTextureUnit2;     ///< GLSL uniform location for the sampler "u_texEmissive"
+    GLuint                  m_iUniformTextureUnit;      ///< GLSL uniform location for the sampler "u_tex"
 
     bool                    m_bAlphaBlend;              ///< Use Alpha Blending ?
 
     //------------------------------------------------------------------------------------
     GLuint                  m_iFBO;                     ///< OpenGL ID for Frame Buffer Object
     GLuint                  m_iColorRenderTexture;      ///< OpenGL ID for Texture Object - used as Color Buffer on the FBO
-    GLuint                  m_iZRenderBuffer;           ///< OpenGL ID for Render Buffer - used as Z Buffer on the FBO
 
-    GLuint                  m_iUniformSamplerPost;      ///< GLSL uniform location for the sampler "u_tex"
+    ParticleSystem          m_ParticleSystem;
+
+    Func_UpdateParticle_Init_Spread                           m_funcInit;
+    Func_UpdateParticle_Position_Acceleration_RandomSpread     m_funcPosition;
+    Func_UpdateParticle_Color_NoChange                      m_funcColor;
+    Func_UpdateParticle_Rotation_NoChange                   m_funcRotation;
+    Func_UpdateParticle_Size_NoChange                       m_funcSize;
+
+    GLint                   m_status;
 
 };
 //====================================================================================================================================
